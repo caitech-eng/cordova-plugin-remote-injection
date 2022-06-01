@@ -36,11 +36,7 @@
  */
 - (id) findWebView
 {
-#ifdef __CORDOVA_4_0_0
-    return [[self webViewEngine] engineWebView];
-#else
     return [self webView];
-#endif
 }
 
 - (void) pluginInitialize
