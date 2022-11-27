@@ -28,19 +28,20 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
     private static String TAG = "RemoteInjectionPlugin";
     private static Pattern REMOTE_URL_REGEX = Pattern.compile("^http(s)?://.*");
 
-
     // List of files to inject before injecting Cordova.
     private final ArrayList<String> preInjectionFileNames = new ArrayList<String>();
-    private int promptInterval;  // Delay before prompting user to retry in seconds
+    private int promptInterval; // Delay before prompting user to retry in seconds
+    private String errorPage;
 
     private RequestLifecycle lifecycle;
 
     protected void pluginInitialize() {
         String pref = webView.getPreferences().getString("CRIInjectFirstFiles", "");
-        for (String path: pref.split(",")) {
+        for (String path : pref.split(",")) {
             preInjectionFileNames.add(path.trim());
         }
         promptInterval = webView.getPreferences().getInteger("CRIPageLoadPromptInterval", 10);
+        errorPage = webView.getPreferences().getString("CRIAndroidErrorPage", null);
 
         final Activity activity = super.cordova.getActivity();
         final CordovaWebViewEngine engine = super.webView.getEngine();
@@ -71,6 +72,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
 
                 try {
                     if (isRemote(json.getString("url"))) {
+                        lifecycle.setErrorOccured(true);
                         lifecycle.requestStopped();
                     }
                 } catch (JSONException e) {
@@ -83,8 +85,16 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
             if (data instanceof String) {
                 String url = (String) data;
                 if (isRemote(url)) {
-                    injectCordova();
-                    lifecycle.requestStopped();
+                    if (lifecycle.isErrorOccured()) {
+                        webView.stopLoading();
+                        if (errorPage != null) {
+                            webView.loadUrlIntoView(errorPage, false);
+                        }
+                        new UserPrompt(lifecycle, super.cordova.getActivity(), webView.getEngine(), url).show();
+                    } else {
+                        injectCordova();
+                        lifecycle.requestStopped();
+                    }
                 }
             } else {
                 onMessageTypeFailure(id, data);
@@ -114,15 +124,17 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
 
     private void injectCordova() {
         List<String> jsPaths = new ArrayList<String>();
-        for (String path: preInjectionFileNames) {
+        for (String path : preInjectionFileNames) {
             jsPaths.add(path);
         }
 
         jsPaths.add("www/cordova.js");
 
         // We load the plugin code manually rather than allow cordova to load them (via
-        // cordova_plugins.js).  The reason for this is the WebView will attempt to load the
-        // file in the origin of the page (e.g. https://truckmover.com/plugins/plugin/plugin.js).
+        // cordova_plugins.js). The reason for this is the WebView will attempt to load
+        // the
+        // file in the origin of the page (e.g.
+        // https://truckmover.com/plugins/plugin/plugin.js).
         // By loading them first cordova will skip its loading process altogether.
         jsPaths.addAll(jsPathsToInject(cordova.getActivity().getResources().getAssets(), "www/plugins"));
 
@@ -131,10 +143,11 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
 
         // The way that I figured out to inject for android is to inject it as a script
         // tag with the full JS encoded as a data URI
-        // (https://developer.mozilla.org/en-US/docs/Web/HTTP/data_URIs).  The script tag
-        // is appended to the DOM and executed via a javascript URL (e.g. javascript:doJsStuff()).
+        // (https://developer.mozilla.org/en-US/docs/Web/HTTP/data_URIs). The script tag
+        // is appended to the DOM and executed via a javascript URL (e.g.
+        // javascript:doJsStuff()).
         StringBuilder jsToInject = new StringBuilder();
-        for (String path: jsPaths) {
+        for (String path : jsPaths) {
             jsToInject.append(readFile(cordova.getActivity().getResources().getAssets(), path));
         }
         String jsUrl = "javascript:var script = document.createElement('script');";
@@ -178,14 +191,14 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
      * Searches the provided path for javascript files recursively.
      *
      * @param assets
-     * @param path start path
+     * @param path   start path
      * @return found JS files
      */
-    private List<String> jsPathsToInject(AssetManager assets, String path){
+    private List<String> jsPathsToInject(AssetManager assets, String path) {
         List jsPaths = new ArrayList<String>();
 
         try {
-            for (String filePath: assets.list(path)) {
+            for (String filePath : assets.list(path)) {
                 String fullPath = path + File.separator + filePath;
 
                 if (fullPath.endsWith(".js")) {
@@ -205,10 +218,13 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
     }
 
     private static class RequestLifecycle {
+        private boolean errorOccured = false;
+
         private final Activity activity;
         private final CordovaWebViewEngine engine;
-        private UserPromptTask task;
+        private UserPrompt task;
         private final int promptInterval;
+        private Timer timer;
 
         RequestLifecycle(Activity activity, CordovaWebViewEngine engine, int promptInterval) {
             this.activity = activity;
@@ -220,29 +236,49 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
             return task != null;
         }
 
+        public boolean isErrorOccured() {
+            return errorOccured;
+        }
+
+        public void setErrorOccured(boolean errorOccured) {
+            this.errorOccured = errorOccured;
+        }
+
         void requestStopped() {
             stopTask();
         }
 
         void requestStarted(final String url) {
+            errorOccured = false;
             startTask(url);
         }
 
         private synchronized void stopTask() {
             if (task != null) {
-                task.cancel();
+                task.cleanup();
                 task = null;
             }
         }
 
         private synchronized void startTask(final String url) {
             if (task != null) {
-                task.cancel();
+                task.cleanup();
             }
-
-            if (promptInterval > 0 ) {
-                task = new UserPromptTask(this, activity, engine, url);
-                new Timer().schedule(task, promptInterval * 1000);
+            if (promptInterval > 0) {
+                // If I pass the TASK directly to SCHEDULE, it cannot be executed. The cause is
+                // unknown.
+                final UserPrompt prompt = new UserPrompt(this, activity, engine, url);
+                final RequestLifecycle lifecycle = this;
+                new Timer().schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        if (lifecycle.isLoading()) {
+                            prompt.show();
+                        } else {
+                            lifecycle.stopTask();
+                        }
+                    }
+                }, promptInterval * 1000);
             }
         }
     }
@@ -250,7 +286,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
     /**
      * Prompt the user asking if they want to wait on the current request or retry.
      */
-    static class UserPromptTask extends TimerTask {
+    static class UserPrompt {
         private final RequestLifecycle lifecycle;
         private final Activity activity;
         private final CordovaWebViewEngine engine;
@@ -258,19 +294,11 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
 
         AlertDialog alertDialog;
 
-        UserPromptTask(RequestLifecycle lifecycle, Activity activity, CordovaWebViewEngine engine, String url) {
+        UserPrompt(RequestLifecycle lifecycle, Activity activity, CordovaWebViewEngine engine, String url) {
             this.lifecycle = lifecycle;
             this.activity = activity;
             this.engine = engine;
             this.url = url;
-        }
-
-        @Override
-        public boolean cancel() {
-            boolean result = super.cancel();
-            cleanup();
-
-            return result;
         }
 
         private void cleanup() {
@@ -280,41 +308,27 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
             }
         }
 
-        @Override
-        public void run() {
-            if (lifecycle.isLoading()) {
-                // Prompts the user giving them the choice to wait on the current request or retry.
-                lifecycle.activity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-                        builder.setMessage("The server is taking longer than expected to respond.")
-                                .setOnDismissListener(new DialogInterface.OnDismissListener() {
-                                    @Override
-                                    public void onDismiss(DialogInterface dialog) {
-                                        UserPromptTask.this.cleanup();
-                                    }
-                                })
-                                .setPositiveButton("Retry", new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int id) {
-                                        // Obviously only works for GETs but good enough.
-                                        engine.loadUrl(engine.getUrl(), false);
-                                    }
-                                })
-                                .setNegativeButton("Wait", new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int id) {
-                                        lifecycle.startTask(url);
-                                    }
-                                });
-                        AlertDialog dialog = UserPromptTask.this.alertDialog = builder.create();
-                        dialog.show();
-                    }
-                });
-            } else {
-                lifecycle.stopTask();
-            }
+        public void show() {
+            // Prompts the user giving them the choice to wait on the current request or
+            // retry.
+            lifecycle.activity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+                    builder.setMessage("サーバに接続できません.")
+                            .setPositiveButton("再試行", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int id) {
+                                    // Obviously only works for GETs but good enough.
+                                    engine.loadUrl(url, true);
+                                    cleanup();
+                                }
+                            });
+                    AlertDialog dialog = UserPrompt.this.alertDialog = builder.create();
+                    dialog.setCancelable(false);
+                    dialog.show();
+                }
+            });
         }
     }
 }
