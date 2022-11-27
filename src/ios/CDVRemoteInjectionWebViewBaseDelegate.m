@@ -165,7 +165,7 @@
 {
     
     alertController = [UIAlertController
-                    alertControllerWithTitle:@"Connection Error"
+                    alertControllerWithTitle:@"接続エラー"
                     message:message
                     preferredStyle:UIAlertControllerStyleAlert];
     
@@ -219,7 +219,7 @@
     }
     
     if (userRequestedReload == NO && self.plugin.showConnectionErrorDialog == YES) {
-        [self displayRetryPromptWithMessage:@"Unable to contact the site." withCancelText:@"Close" retryable:NO];
+        [self displayRetryPromptWithMessage:@"サイトに接続できません." withCancelText:@"閉じる" retryable:NO];
     }
 }
 
