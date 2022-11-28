@@ -265,8 +265,6 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
                 task.cleanup();
             }
             if (promptInterval > 0) {
-                // If I pass the TASK directly to SCHEDULE, it cannot be executed. The cause is
-                // unknown.
                 final UserPrompt prompt = new UserPrompt(this, activity, engine, url);
                 final RequestLifecycle lifecycle = this;
                 new Timer().schedule(new TimerTask() {
@@ -284,7 +282,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
     }
 
     /**
-     * Prompt the user asking if they want to wait on the current request or retry.
+     * Prompt network error and retry button.
      */
     static class UserPrompt {
         private final RequestLifecycle lifecycle;
@@ -309,8 +307,6 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
         }
 
         public void show() {
-            // Prompts the user giving them the choice to wait on the current request or
-            // retry.
             lifecycle.activity.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
