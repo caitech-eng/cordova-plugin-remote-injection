@@ -219,7 +219,7 @@
     }
     
     if (userRequestedReload == NO && self.plugin.showConnectionErrorDialog == YES) {
-        [self displayRetryPromptWithMessage:@"サイトに接続できません." withCancelText:@"閉じる" retryable:NO];
+        [self displayRetryPromptWithMessage:@"サーバに接続できません." withCancelText:@"閉じる" retryable:NO];
     }
 }
 
