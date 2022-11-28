@@ -90,7 +90,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
                         if (errorPage != null) {
                             webView.loadUrlIntoView(errorPage, false);
                         }
-                        new UserPrompt(lifecycle, super.cordova.getActivity(), webView.getEngine(), url).show();
+                        new ErrorPrompt(lifecycle, super.cordova.getActivity(), webView.getEngine(), url).show();
                     } else {
                         injectCordova();
                         lifecycle.requestStopped();
@@ -222,7 +222,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
 
         private final Activity activity;
         private final CordovaWebViewEngine engine;
-        private UserPrompt task;
+        private ErrorPrompt prompt;
         private final int promptInterval;
         private Timer timer;
 
@@ -233,7 +233,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
         }
 
         boolean isLoading() {
-            return task != null;
+            return prompt != null;
         }
 
         public boolean isErrorOccured() {
@@ -254,18 +254,18 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
         }
 
         private synchronized void stopTask() {
-            if (task != null) {
-                task.cleanup();
-                task = null;
+            if (prompt != null) {
+                prompt.cleanup();
+                prompt = null;
             }
         }
 
         private synchronized void startTask(final String url) {
-            if (task != null) {
-                task.cleanup();
+            if (prompt != null) {
+                prompt.cleanup();
             }
             if (promptInterval > 0) {
-                final UserPrompt prompt = new UserPrompt(this, activity, engine, url);
+                final ErrorPrompt prompt = new ErrorPrompt(this, activity, engine, url);
                 final RequestLifecycle lifecycle = this;
                 new Timer().schedule(new TimerTask() {
                     @Override
@@ -284,7 +284,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
     /**
      * Prompt network error and retry button.
      */
-    static class UserPrompt {
+    static class ErrorPrompt {
         private final RequestLifecycle lifecycle;
         private final Activity activity;
         private final CordovaWebViewEngine engine;
@@ -292,7 +292,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
 
         AlertDialog alertDialog;
 
-        UserPrompt(RequestLifecycle lifecycle, Activity activity, CordovaWebViewEngine engine, String url) {
+        ErrorPrompt(RequestLifecycle lifecycle, Activity activity, CordovaWebViewEngine engine, String url) {
             this.lifecycle = lifecycle;
             this.activity = activity;
             this.engine = engine;
@@ -320,7 +320,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
                                     cleanup();
                                 }
                             });
-                    AlertDialog dialog = UserPrompt.this.alertDialog = builder.create();
+                    AlertDialog dialog = ErrorPrompt.this.alertDialog = builder.create();
                     dialog.setCancelable(false);
                     dialog.show();
                 }
