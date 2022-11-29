@@ -236,7 +236,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
             return prompt != null;
         }
 
-        public boolean isErrorOccured() {
+        boolean isErrorOccured() {
             return errorOccured;
         }
 
