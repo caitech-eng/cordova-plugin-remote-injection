@@ -269,6 +269,13 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
                 final RequestLifecycle lifecycle = this;
                 new Timer().schedule(new TimerTask() {
                     @Override
+                    public boolean cancel() {
+                        boolean result = super.cancel();
+                        prompt.cleanup();
+                        return result;
+                    }
+
+                    @Override
                     public void run() {
                         if (lifecycle.isLoading()) {
                             prompt.show();
@@ -328,3 +335,4 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
         }
     }
 }
+
