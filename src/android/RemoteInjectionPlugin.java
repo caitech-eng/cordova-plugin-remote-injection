@@ -240,7 +240,7 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
             return errorOccured;
         }
 
-        public void setErrorOccured(boolean errorOccured) {
+        void setErrorOccured(boolean errorOccured) {
             this.errorOccured = errorOccured;
         }
 
@@ -335,4 +335,5 @@ public class RemoteInjectionPlugin extends CordovaPlugin {
         }
     }
 }
+
 
