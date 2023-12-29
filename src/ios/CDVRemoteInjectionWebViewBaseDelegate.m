@@ -38,12 +38,12 @@
      Last time a request was made to load the web view.  Can be NULL.
      */
     NSDate *lastRequestTime;
-    
+
     /*
      Reference to the currently displayed alert view.  Can be NULL.
      */
     UIAlertController *alertController;
-    
+
     /*
      True if the user forced a reload.
      */
@@ -61,17 +61,17 @@
 - (NSString *) buildInjectionJS;
 {
     NSArray *jsPaths = [self jsPathsToInject];
-    
+
     NSString *path;
     NSMutableString *concatenatedJS = [[NSMutableString alloc] init];
-    
+
     for (path in jsPaths) {
         NSString *jsFilePath = [[NSBundle mainBundle] pathForResource:path ofType:nil];
-        
+
         NSURL *jsURL = [NSURL fileURLWithPath:jsFilePath];
         NSString *js = [NSString stringWithContentsOfFile:jsURL.path encoding:NSUTF8StringEncoding error:nil];
         NSLog(@"Concatenating JS found in path: '%@'", jsURL.path);
-        
+
         [concatenatedJS appendString:js];
     }
     return concatenatedJS;
@@ -84,20 +84,20 @@
 {
     // Array of paths that represent JS files to inject into the WebView.  Order is important.
     NSMutableArray *jsPaths = [NSMutableArray new];
-    
+
     // Pre injection files.
     for (id path in self.plugin.injectFirstFiles) {
         [jsPaths addObject: path];
     }
-    
+
     [jsPaths addObject:@"www/cordova.js"];
-    
+
     // We load the plugin code manually rather than allow cordova to load them (via
     // cordova_plugins.js).  The reason for this is the WebView will attempt to load the
     // file in the origin of the page (e.g. https://example.com/plugins/plugin/plugin.js).
     // By loading them first cordova will skip the loading process altogether.
     NSDirectoryEnumerator *directoryEnumerator = [[NSFileManager defaultManager] enumeratorAtPath:[[NSBundle mainBundle] pathForResource:@"www/plugins" ofType:nil]];
-    
+
     NSString *path;
     while (path = [directoryEnumerator nextObject])
     {
@@ -107,7 +107,7 @@
     }
     // Initialize cordova plugin registry.
     [jsPaths addObject:@"www/cordova_plugins.js"];
-    
+
     return jsPaths;
 }
 
@@ -121,7 +121,7 @@
     if ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"]) {
         return YES;
     }
-    
+
     NSLog(@"Unsupported scheme for cordova injection: '%@'.  Skipping.", scheme);
     return NO;
 }
@@ -134,7 +134,7 @@
     if (self.plugin.promptInterval > 0) {
         [self cancelRequestTimer];
         lastRequestTime = [NSDate date];
-        
+
         // Schedule progress check.
         NSLog(@"Starting a timer to track page load time that will expire in '%ld' seconds.", (long)self.plugin.promptInterval);
         [self performSelector:@selector(loadProgressCheckCallback:) withObject:lastRequestTime afterDelay:self.plugin.promptInterval];
@@ -150,7 +150,7 @@
     if (lastRequestTime != NULL && [(NSDate *)requestTime isEqualToDate:lastRequestTime]) {
         if ([self isLoading]) {
             NSLog(@"Request taking too long, displaying dialog.");
-            [self displayRetryPromptWithMessage:@"The server is taking longer than expected to respond." withCancelText:@"Wait" retryable:YES];
+            [self displayRetryPromptWithMessage:@"サーバーからの応答がありません。ネットワーク環境の良いところで再試行してください。" withCancelText:@"キャンセル" retryable:YES];
             return;
         } else {
             NSLog(@"No request in progress.  Not displaying dialog.");
@@ -163,12 +163,12 @@
  */
 -(void) displayRetryPromptWithMessage:(NSString*)message withCancelText:(NSString *)cancelText retryable:(BOOL) retry
 {
-    
+
     alertController = [UIAlertController
                     alertControllerWithTitle:@"接続エラー"
                     message:message
                     preferredStyle:UIAlertControllerStyleAlert];
-    
+
     UIAlertAction* cancelBtn = [UIAlertAction
                                actionWithTitle:cancelText
                                style:UIAlertActionStyleCancel
@@ -177,10 +177,10 @@
                                 }];
 
     [alertController addAction:cancelBtn];
-    
+
     if (retry) {
         UIAlertAction* retryBtn = [UIAlertAction
-                            actionWithTitle:@"Retry"
+                            actionWithTitle:@"再試行"
                             style:UIAlertActionStyleDefault
                             handler:^(UIAlertAction * action) {
                                 userRequestedReload = YES;
@@ -189,10 +189,10 @@
                                 [self startRequestTimer];
                             }];
         [alertController addAction:retryBtn];
-        
+
     }
         UIViewController* rootController = [UIApplication sharedApplication].delegate.window.rootViewController;
-        
+
         [rootController presentViewController:alertController animated:YES completion:nil];
 }
 
@@ -213,11 +213,11 @@
 - (void)loadPageFailure:(NSError *)error
 {
     NSLog(@"Error loading page: %@", [error description]);
-    
+
     if ([error code] == NSURLErrorCancelled) { //ignore if page load didn't complete and user moved away to another page
         return;
     }
-    
+
     if (userRequestedReload == NO && self.plugin.showConnectionErrorDialog == YES) {
         [self displayRetryPromptWithMessage:@"サーバに接続できません." withCancelText:@"閉じる" retryable:NO];
     }
@@ -233,7 +233,7 @@
         [alertController dismissViewControllerAnimated:YES completion:nil];
         alertController = NULL;
     }
-    
+
     if (lastRequestTime != NULL) {
         [NSObject cancelPreviousPerformRequestsWithTarget:(id)self selector:@selector(loadProgressCheckCallback:) object:lastRequestTime];
     }
